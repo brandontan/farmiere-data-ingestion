@@ -1,94 +1,62 @@
-# Vercel Deployment Guide
+# 🚨 DEPLOYMENT CHECKLIST - MUST COMPLETE BEFORE DEPLOYING
 
-## 🚨 **SECURITY ALERT**
+## CRITICAL SECURITY STEPS
 
-**IMPORTANT**: The exposed Supabase service role key in the code has been removed and replaced with environment variables. You MUST:
+### 1. Rotate Supabase Credentials (IMMEDIATE)
+- [ ] Go to Supabase Dashboard > Settings > API
+- [ ] Regenerate service role key
+- [ ] Update `.env.local` with new key
+- [ ] NEVER commit these keys to git
 
-1. **Rotate your Supabase service role key immediately** in the Supabase dashboard
-2. **Never commit `.env.local` to version control**
-3. **Use environment variables in Vercel**
+### 2. Set Up Vercel Environment Variables
+Go to Vercel Dashboard > Project Settings > Environment Variables:
+- [ ] `NEXT_PUBLIC_SUPABASE_URL` = your_supabase_url
+- [ ] `NEXT_PUBLIC_SUPABASE_ANON_KEY` = your_anon_key (NOT service role!)
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` = your_service_role_key (server-side only)
+- [ ] `API_SECRET_KEY` = generate a random string for API protection
 
-## 📋 Pre-Deployment Checklist
+### 3. Enable Row Level Security (RLS)
+Run in Supabase SQL Editor:
+```sql
+-- Enable RLS on all tables
+ALTER TABLE upload_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE temp_tiktok_data ENABLE ROW LEVEL SECURITY;
+ALTER TABLE temp_shopee_data ENABLE ROW LEVEL SECURITY;
+ALTER TABLE temp_aipost_data ENABLE ROW LEVEL SECURITY;
+ALTER TABLE temp_goaffpro_data ENABLE ROW LEVEL SECURITY;
 
-- [ ] Rotate Supabase service role key
-- [ ] Update `.env.local` with new credentials
-- [ ] Ensure `.env.local` is in `.gitignore`
-- [ ] Test locally with new credentials
-- [ ] Remove any remaining hardcoded secrets
-
-## 🚀 Deployment Steps
-
-### 1. Prepare Environment Variables
-
-Create/update `.env.local` with your actual values:
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE_KEY=your_new_service_role_key
+-- Create a policy for service role (temporary)
+CREATE POLICY "Service role can do everything" ON upload_history
+  FOR ALL USING (auth.role() = 'service_role');
+-- Repeat for other tables
 ```
 
-### 2. Deploy to Vercel
-
-#### Option A: Using Vercel CLI
+### 4. Test Locally with Production Config
 ```bash
-npm i -g vercel
-vercel
+# Create .env.production.local with Vercel env vars
+npm run build
+npm run start
 ```
 
-#### Option B: Using GitHub Integration
-1. Push code to GitHub (ensure no secrets are committed)
-2. Import project in Vercel Dashboard
-3. Configure environment variables
-
-### 3. Configure Environment Variables in Vercel
-
-In your Vercel project settings, add:
-
-| Variable Name | Value | Environment |
-|--------------|-------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase URL | All |
-| `SUPABASE_SERVICE_ROLE_KEY` | Your service role key | All |
-
-⚠️ **IMPORTANT**: Keep `SUPABASE_SERVICE_ROLE_KEY` server-side only!
-
-### 4. Security Best Practices
-
-1. **Use Row Level Security (RLS)** in Supabase for production
-2. **Consider using Supabase anon key** for client-side operations
-3. **Implement API rate limiting** for production
-4. **Add authentication** if this will be publicly accessible
-5. **Monitor usage** through Supabase dashboard
-
-### 5. Post-Deployment
-
-1. Test all upload flows
-2. Verify duplicate detection works
-3. Check error handling
-4. Monitor Supabase usage
-
-## 🔒 Security Recommendations
-
-### Immediate Actions:
-1. **Rotate the exposed service role key NOW**
-2. Enable RLS policies in Supabase
-3. Consider implementing user authentication
-
-### For Production:
-```javascript
-// Consider using anon key for client-side
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-)
-
-// Keep service role key only for server-side operations
+### 5. Deploy to Vercel
+```bash
+vercel --prod
 ```
 
-## 📚 Additional Resources
+## POST-DEPLOYMENT
 
-- [Vercel Environment Variables](https://vercel.com/docs/environment-variables)
-- [Supabase Row Level Security](https://supabase.com/docs/guides/auth/row-level-security)
-- [Next.js Security Headers](https://nextjs.org/docs/advanced-features/security-headers)
+### Monitor for Issues
+- [ ] Check Vercel Functions logs
+- [ ] Monitor Supabase usage
+- [ ] Test upload functionality
 
----
+### Future Security Improvements
+- [ ] Implement proper authentication (NextAuth.js)
+- [ ] Add rate limiting
+- [ ] Set up monitoring/alerting
+- [ ] Add CORS configuration
+- [ ] Implement proper user roles
 
-⚠️ **Remember**: NEVER commit secrets to version control!
+## ⚠️ WARNING
+Do NOT deploy without completing the critical security steps above.
+Your database is currently vulnerable if you deploy as-is.

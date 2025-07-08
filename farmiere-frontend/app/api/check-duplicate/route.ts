@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check for same filename in any data source (different restriction)
-    if (duplicateFileName && duplicateFileName.length > 0 && filenameError?.code !== 'PGRST116') {
+    if (duplicateFileName && duplicateFileName.length > 0 && (!filenameError || (filenameError as any).code !== 'PGRST116')) {
       const duplicate = duplicateFileName[0]
       return NextResponse.json({
         isDuplicate: true,

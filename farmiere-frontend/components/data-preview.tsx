@@ -60,23 +60,23 @@ export function DataPreview({
       const formData = new FormData()
       formData.append('file', file)
       formData.append('tableName', selectedSource.table)
-      formData.append('createTable', 'false') // Only create table if it doesn't exist
-      formData.append('appendMode', 'true') // Append to existing table
+      formData.append('createTable', 'false') // Never create tables
+      formData.append('appendMode', 'true') // Always append to existing table
       formData.append('fileName', data.fileName)
       formData.append('dataSource', data.dataSource || '')
       if (data.fileHash) {
         formData.append('fileHash', data.fileHash)
       }
 
-      // Simulate progress
-      onUploadProgress(25)
+      // Simulate progress during upload
+      onUploadProgress(10)
 
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       })
 
-      onUploadProgress(75)
+      onUploadProgress(90)
 
       const result = await response.json()
 

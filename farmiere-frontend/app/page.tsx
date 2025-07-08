@@ -75,6 +75,11 @@ export default function DataIngestionPage() {
     setActiveTab('upload')
   }
 
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    window.location.href = '/login'
+  }
+
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
       <div className="mb-8 text-center">
@@ -89,6 +94,12 @@ export default function DataIngestionPage() {
         <p className="text-muted-foreground mt-2">
           Upload CSV files for TikTok Shop, Shopee, aiPost, and GoAffPro data
         </p>
+        <button
+          onClick={handleLogout}
+          className="mt-4 text-sm text-muted-foreground hover:text-foreground underline"
+        >
+          Logout
+        </button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -102,10 +113,9 @@ export default function DataIngestionPage() {
         <TabsContent value="upload" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Upload CSV File</CardTitle>
-              <CardDescription>
-                Select a CSV file and choose your correct data source from dropdown. This is important
-              </CardDescription>
+              <CardTitle className="text-2xl font-bold">
+                Step 1: Choose your data source, then Step 2: Upload your CSV file
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <FileUpload 

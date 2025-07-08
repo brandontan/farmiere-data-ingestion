@@ -210,7 +210,7 @@ export function FileUpload({ onDataParsed, disabled }: FileUploadProps) {
           
           setIsProcessing(false)
         },
-        error: (error) => {
+        error: (error: any) => {
           setError(`Failed to parse CSV: ${error.message}`)
           setIsProcessing(false)
         }

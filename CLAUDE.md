@@ -176,6 +176,17 @@ Timeline Status: ✅ ON TRACK (Migration Day 1 of 2)
 
 
 
+## General Principle
+When receiving requests that add complexity:
+1. **Observe** the request and understand the intent
+2. **Reflect** on whether it truly improves the system
+3. **Push back** with evidence-based rationale if it introduces unnecessary complexity
+4. **Suggest** simpler alternatives that achieve the same goal
+
+The goal is always the simplest, most reliable solution - not the most technically sophisticated one.
+
+
+
 
 
 

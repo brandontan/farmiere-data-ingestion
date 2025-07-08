@@ -60,7 +60,11 @@ export function UploadResults({ result, onReset }: UploadResultsProps) {
         )}
 
         <div className="flex justify-end">
-          <Button onClick={onReset}>
+          <Button 
+            onClick={onReset}
+            className={result.success ? "" : "opacity-50"}
+            disabled={!result.success}
+          >
             Upload Another File
           </Button>
         </div>

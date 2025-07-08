@@ -3,6 +3,7 @@ import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
+  console.log('=== UPLOAD REQUEST STARTED ===')
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -12,6 +13,14 @@ export async function POST(request: NextRequest) {
     const fileName = formData.get('fileName') as string
     const dataSource = formData.get('dataSource') as string
     const fileHash = formData.get('fileHash') as string
+
+    console.log('Upload parameters:', {
+      fileName,
+      tableName,
+      dataSource,
+      fileSize: file?.size,
+      fileType: file?.type
+    })
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -28,7 +37,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Read and parse CSV file
+    console.log('Reading CSV file...')
     const text = await file.text()
+    console.log(`CSV file size: ${text.length} characters`)
+    
     const parseResult = Papa.parse(text, {
       header: true,
       skipEmptyLines: true,
@@ -43,6 +55,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (parseResult.errors.length > 0) {
+      console.error('CSV parsing errors:', parseResult.errors)
       return NextResponse.json({ 
         error: 'CSV parsing failed', 
         details: parseResult.errors 
@@ -50,14 +63,18 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parseResult.data as Record<string, any>[]
+    console.log(`Parsed CSV: ${data.length} rows`)
     
     if (data.length === 0) {
+      console.error('No data found in CSV file')
       return NextResponse.json({ error: 'No data found in CSV' }, { status: 400 })
     }
 
     // Get column names and infer types
     const columns = Object.keys(data[0])
     const columnTypes = inferColumnTypes(data, columns)
+    console.log('CSV columns:', columns)
+    console.log('Inferred column types:', columnTypes)
 
     // Check if upload_history table exists (created via migration)
     const { error: historyCheckError } = await supabase
@@ -71,6 +88,8 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
+    let tableWasCreated = false
+    
     // Check if target table exists, create if it doesn't
     const { error: tableCheckError } = await supabase
       .from(tableName)
@@ -78,36 +97,21 @@ export async function POST(request: NextRequest) {
       .limit(1)
     
     if (tableCheckError && tableCheckError.code === 'PGRST106') {
-      // Table doesn't exist - create it automatically
-      const createTableSQL = generateCreateTableSQL(tableName, columnTypes)
-      
-      try {
-        // Create migration file
-        const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
-        const migrationName = `${timestamp}_create_${tableName}.sql`
-        
-        // Apply the SQL directly using a database function call
-        const { error: createError } = await createTableDynamically(createTableSQL, tableName)
-        
-        if (createError) {
-          return NextResponse.json({ 
-            error: `Failed to create table '${tableName}': ${createError}`,
-            sql: createTableSQL,
-            tableName
-          }, { status: 500 })
-        }
-        
-        console.log(`Successfully created table: ${tableName}`)
-      } catch (error) {
-        return NextResponse.json({ 
-          error: `Failed to create table '${tableName}': ${error instanceof Error ? error.message : 'Unknown error'}`,
-          sql: createTableSQL,
-          tableName
-        }, { status: 500 })
-      }
+      // Table doesn't exist - return error instead of creating
+      return NextResponse.json({ 
+        error: `Table '${tableName}' does not exist. Please create the table first or use an existing table.`,
+        tableName,
+        suggestions: [
+          'Use one of the existing temp tables: temp_tiktok_data, temp_shopee_data, temp_aipost_data, temp_goaffpro_data',
+          'Or create the table manually in Supabase first'
+        ]
+      }, { status: 400 })
     }
+    
+    // No table creation logic needed since we disabled it
 
     // Insert data with transaction safety
+    console.log('Starting data insertion...')
     const batchSize = 100
     let insertedCount = 0
     const errors: string[] = []
@@ -115,16 +119,27 @@ export async function POST(request: NextRequest) {
 
     try {
       for (let i = 0; i < data.length; i += batchSize) {
+        const batchNumber = Math.floor(i / batchSize) + 1
         const batch = data.slice(i, i + batchSize)
+        console.log(`Processing batch ${batchNumber}: ${batch.length} rows`)
         
-        // Clean and validate data
+        // For temp tables, store data as JSONB
         const cleanedBatch = batch.map(row => {
-          const cleanedRow: Record<string, any> = {}
-          for (const [key, value] of Object.entries(row)) {
-            cleanedRow[key] = cleanValue(value, columnTypes[key])
+          if (tableName.startsWith('temp_')) {
+            // Store entire row as JSONB in data column
+            return { data: row }
+          } else {
+            // Normal table with individual columns
+            const cleanedRow: Record<string, any> = {}
+            for (const [key, value] of Object.entries(row)) {
+              cleanedRow[key] = cleanValue(value, columnTypes[key])
+            }
+            return cleanedRow
           }
-          return cleanedRow
         })
+
+        console.log(`Batch ${batchNumber} cleaned data sample:`, cleanedBatch[0])
+        console.log(`Inserting batch ${batchNumber} into table: ${tableName}`)
 
         const { data: insertedData, error: insertError } = await supabase
           .from(tableName)
@@ -133,10 +148,29 @@ export async function POST(request: NextRequest) {
 
         if (insertError) {
           // Log detailed error for debugging
-          console.error('Insert error:', insertError)
+          console.error('Insert error details:', {
+            error: insertError,
+            message: insertError.message,
+            details: insertError.details,
+            code: insertError.code,
+            hint: insertError.hint
+          })
           
           // If any batch fails, rollback all previous inserts
-          const errorMessage = insertError.message || insertError.details || JSON.stringify(insertError)
+          let errorMessage = 'Unknown error'
+          if (insertError.message) {
+            errorMessage = insertError.message
+          } else if (insertError.details) {
+            errorMessage = insertError.details
+          } else if (insertError.code) {
+            errorMessage = `Error code: ${insertError.code}`
+          } else if (Object.keys(insertError).length === 0) {
+            // Empty error object - likely a timing/network issue
+            errorMessage = 'Table may not be ready for insertion. Please try again in a few seconds.'
+          } else {
+            errorMessage = JSON.stringify(insertError)
+          }
+          
           if (insertedBatches.length > 0) {
             console.log('Rolling back previous inserts due to batch failure...')
             // Note: PostgreSQL doesn't support cross-batch rollback easily
@@ -148,6 +182,8 @@ export async function POST(request: NextRequest) {
           }
           break // Stop processing on first error
         } else {
+          console.log(`Batch ${batchNumber} inserted successfully: ${cleanedBatch.length} rows`)
+          console.log(`Batch ${batchNumber} result sample:`, insertedData?.[0] || 'No data returned')
           insertedCount += cleanedBatch.length
           insertedBatches.push(cleanedBatch)
         }
@@ -198,6 +234,16 @@ export async function POST(request: NextRequest) {
     const success = errors.length === 0 && insertedCount > 0
     const partialSuccess = errors.length > 0 && insertedCount > 0
     
+    console.log('=== UPLOAD SUMMARY ===')
+    console.log(`Total rows processed: ${data.length}`)
+    console.log(`Rows successfully inserted: ${insertedCount}`)
+    console.log(`Errors encountered: ${errors.length}`)
+    console.log(`Success: ${success}, Partial success: ${partialSuccess}`)
+    if (errors.length > 0) {
+      console.log('Error details:', errors)
+    }
+    console.log('=== END UPLOAD SUMMARY ===')
+    
     return NextResponse.json({
       success,
       partialSuccess,
@@ -216,7 +262,13 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Upload error:', error)
+    console.error('=== CRITICAL UPLOAD ERROR ===')
+    console.error('Error type:', typeof error)
+    console.error('Error message:', error instanceof Error ? error.message : 'Unknown error')
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('Full error object:', error)
+    console.error('=== END CRITICAL ERROR ===')
+    
     return NextResponse.json({ 
       error: 'Internal server error', 
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -272,21 +324,37 @@ function generateCreateTableSQL(tableName: string, columnTypes: Record<string, s
 
 async function createTableDynamically(createTableSQL: string, tableName: string): Promise<{error?: string}> {
   try {
+    console.log(`=== CREATING TABLE: ${tableName} ===`)
+    console.log('SQL to execute:', createTableSQL)
+    
     // Use the database function we created to dynamically create tables
     const { data, error } = await supabase.rpc('create_table_if_not_exists', {
-      table_name: tableName,
-      table_sql: createTableSQL
+      table_name_param: tableName,
+      table_sql_param: createTableSQL
     })
 
     if (error) {
-      console.error('Error creating table:', error)
+      console.error('=== TABLE CREATION FAILED ===')
+      console.error('Error object:', error)
+      console.error('Error message:', error.message)
+      console.error('Error code:', error.code)
+      console.error('Error details:', error.details)
+      console.error('Error hint:', error.hint)
+      console.error('=== END TABLE CREATION ERROR ===')
       return { error: error.message }
     }
 
-    console.log('Table creation result:', data)
+    console.log(`=== TABLE CREATION SUCCESS ===`)
+    console.log('Function result:', data)
+    console.log(`Table ${tableName} creation completed`)
+    console.log('=== END TABLE CREATION ===')
     return {}
   } catch (error) {
-    console.error('Exception creating table:', error)
+    console.error('=== TABLE CREATION EXCEPTION ===')
+    console.error('Exception type:', typeof error)
+    console.error('Exception message:', error instanceof Error ? error.message : 'Unknown error')
+    console.error('Exception stack:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('=== END TABLE CREATION EXCEPTION ===')
     return { error: error instanceof Error ? error.message : 'Unknown error' }
   }
 }
