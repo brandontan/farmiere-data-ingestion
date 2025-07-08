@@ -55,6 +55,16 @@ export async function POST(request: NextRequest) {
         console.error('Resend error:', error)
         // Fallback to console log
         console.log(`Magic link for ${email}: ${magicLink}`)
+        
+        // For ai.ops@fefifo.co, always show the link since email won't send
+        if (email === 'ai.ops@fefifo.co') {
+          return NextResponse.json({ 
+            success: true,
+            message: 'Magic link generated! Copy this link:',
+            magicLink
+          })
+        }
+        
         return NextResponse.json({ 
           success: true,
           message: 'Magic link generated! Check console logs (email sending failed).',

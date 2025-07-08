@@ -77,6 +77,11 @@ function LoginForm() {
               <p className="text-sm">
                 Login link sent! Check your email or browser console.
               </p>
+              {email === 'ai.ops@fefifo.co' && (
+                <div className="text-xs text-muted-foreground p-2 bg-gray-100 rounded break-all">
+                  Check the browser console for your magic link
+                </div>
+              )}
               <Button
                 onClick={() => setSuccess(false)}
                 variant="outline"
