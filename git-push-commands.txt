@@ -1,0 +1,25 @@
+# Git Push Commands
+
+## After creating your remote repository, run these commands:
+
+### For GitHub:
+git remote add origin https://github.com/YOUR_USERNAME/farmiere-data-ingestion.git
+git push -u origin main
+
+### For GitLab:
+git remote add origin https://gitlab.com/YOUR_USERNAME/farmiere-data-ingestion.git
+git push -u origin main
+
+### For Bitbucket:
+git remote add origin https://bitbucket.org/YOUR_USERNAME/farmiere-data-ingestion.git
+git push -u origin main
+
+### If using SSH instead of HTTPS:
+git remote add origin git@github.com:YOUR_USERNAME/farmiere-data-ingestion.git
+git push -u origin main
+
+## To verify remote is added:
+git remote -v
+
+## If you need to change the remote URL later:
+git remote set-url origin NEW_URL
