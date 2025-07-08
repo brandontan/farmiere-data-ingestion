@@ -104,7 +104,7 @@ export default function DataIngestionPage() {
             <CardHeader>
               <CardTitle>Upload CSV File</CardTitle>
               <CardDescription>
-                Select a CSV file to parse and preview before importing to your database
+                Select a CSV file and choose your correct data source from dropdown. This is important
               </CardDescription>
             </CardHeader>
             <CardContent>

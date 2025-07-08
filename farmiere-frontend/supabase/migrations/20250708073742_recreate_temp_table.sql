@@ -1,0 +1,2 @@
+-- This migration was created for dynamic table creation
+-- Tables will now be created automatically when needed during upload

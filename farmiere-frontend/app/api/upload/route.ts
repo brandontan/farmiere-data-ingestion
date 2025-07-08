@@ -71,21 +71,40 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // For production: pre-create tables or use existing ones
-    // Check if target table exists
+    // Check if target table exists, create if it doesn't
     const { error: tableCheckError } = await supabase
       .from(tableName)
       .select('*')
       .limit(1)
     
     if (tableCheckError && tableCheckError.code === 'PGRST106') {
-      // Table doesn't exist - return error with SQL for manual creation
+      // Table doesn't exist - create it automatically
       const createTableSQL = generateCreateTableSQL(tableName, columnTypes)
-      return NextResponse.json({ 
-        error: `Table '${tableName}' does not exist. Please create it using the following SQL in your Supabase dashboard:`,
-        sql: createTableSQL,
-        tableName
-      }, { status: 400 })
+      
+      try {
+        // Create migration file
+        const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
+        const migrationName = `${timestamp}_create_${tableName}.sql`
+        
+        // Apply the SQL directly using a database function call
+        const { error: createError } = await createTableDynamically(createTableSQL, tableName)
+        
+        if (createError) {
+          return NextResponse.json({ 
+            error: `Failed to create table '${tableName}': ${createError}`,
+            sql: createTableSQL,
+            tableName
+          }, { status: 500 })
+        }
+        
+        console.log(`Successfully created table: ${tableName}`)
+      } catch (error) {
+        return NextResponse.json({ 
+          error: `Failed to create table '${tableName}': ${error instanceof Error ? error.message : 'Unknown error'}`,
+          sql: createTableSQL,
+          tableName
+        }, { status: 500 })
+      }
     }
 
     // Insert data with transaction safety
@@ -138,20 +157,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Record upload in history table for duplicate detection
+    let historyRecordId: string | null = null
     if (fileHash && fileName && dataSource) {
       try {
-        await supabase
-          .from('upload_history')
-          .insert({
-            file_hash: fileHash,
-            original_filename: fileName,
-            data_source: dataSource,
-            table_name: tableName,
-            rows_inserted: insertedCount,
-            upload_date: new Date().toISOString()
-          })
+        if (insertedCount > 0) {
+          // Only record successful uploads
+          const { data: historyData } = await supabase
+            .from('upload_history')
+            .insert({
+              file_hash: fileHash,
+              original_filename: fileName,
+              data_source: dataSource,
+              table_name: tableName,
+              rows_inserted: insertedCount,
+              upload_date: new Date().toISOString()
+            })
+            .select()
+          
+          if (historyData && historyData[0]) {
+            historyRecordId = historyData[0].id
+          }
+        } else {
+          // If no rows were inserted, clean up any existing history for this file
+          await supabase
+            .from('upload_history')
+            .delete()
+            .eq('file_hash', fileHash)
+            .eq('data_source', dataSource)
+            .eq('original_filename', fileName)
+            
+          console.log(`Cleaned up failed upload history for ${fileName}`)
+        }
       } catch (historyError) {
-        console.warn('Failed to record upload history:', historyError)
+        console.warn('Failed to manage upload history:', historyError)
         // Don't fail the upload if history recording fails
       }
     }
@@ -230,6 +268,27 @@ function generateCreateTableSQL(tableName: string, columnTypes: Record<string, s
       created_at TIMESTAMP DEFAULT NOW()
     );
   `
+}
+
+async function createTableDynamically(createTableSQL: string, tableName: string): Promise<{error?: string}> {
+  try {
+    // Use the database function we created to dynamically create tables
+    const { data, error } = await supabase.rpc('create_table_if_not_exists', {
+      table_name: tableName,
+      table_sql: createTableSQL
+    })
+
+    if (error) {
+      console.error('Error creating table:', error)
+      return { error: error.message }
+    }
+
+    console.log('Table creation result:', data)
+    return {}
+  } catch (error) {
+    console.error('Exception creating table:', error)
+    return { error: error instanceof Error ? error.message : 'Unknown error' }
+  }
 }
 
 function validateFile(file: File): string | null {
