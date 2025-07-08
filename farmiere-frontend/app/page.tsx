@@ -7,8 +7,6 @@ import { UploadProgress } from '@/components/upload-progress'
 import { UploadResults } from '@/components/upload-results'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
-import { Database } from 'lucide-react'
 
 export interface ParsedData {
   data: Record<string, any>[]
@@ -33,27 +31,6 @@ export default function DataIngestionPage() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
   const [activeTab, setActiveTab] = useState('upload')
-  const [isSettingUp, setIsSettingUp] = useState(false)
-
-  const setupTables = async () => {
-    setIsSettingUp(true)
-    try {
-      const response = await fetch('/api/setup-tables', {
-        method: 'POST',
-      })
-      
-      if (response.ok) {
-        alert('Database tables setup successfully!')
-      } else {
-        const error = await response.json()
-        alert(`Setup failed: ${error.error}`)
-      }
-    } catch (error) {
-      alert(`Setup failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    } finally {
-      setIsSettingUp(false)
-    }
-  }
 
   const handleDataParsed = (data: ParsedData) => {
     setParsedData(data)
@@ -111,18 +88,6 @@ export default function DataIngestionPage() {
         <p className="text-muted-foreground mt-2">
           Upload CSV files for TikTok Shop, Shopee, aiPost, and GoAffPro data
         </p>
-        <div className="mt-4">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={setupTables}
-            disabled={isSettingUp}
-            className="text-xs"
-          >
-            <Database className="h-3 w-3 mr-2" />
-            {isSettingUp ? 'Setting up...' : 'One-time Database Setup'}
-          </Button>
-        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">

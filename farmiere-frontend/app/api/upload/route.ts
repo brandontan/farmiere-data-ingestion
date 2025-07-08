@@ -53,10 +53,28 @@ export async function POST(request: NextRequest) {
     const columns = Object.keys(data[0])
     const columnTypes = inferColumnTypes(data, columns)
 
-    // Always try to create table if it doesn't exist
+    // Ensure upload_history table exists (for duplicate detection)
+    const uploadHistorySQL = `
+      CREATE TABLE IF NOT EXISTS upload_history (
+        id SERIAL PRIMARY KEY,
+        file_hash VARCHAR(64) NOT NULL,
+        original_filename VARCHAR(255) NOT NULL,
+        data_source VARCHAR(50) NOT NULL,
+        table_name VARCHAR(100) NOT NULL,
+        rows_inserted INTEGER NOT NULL DEFAULT 0,
+        upload_date TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_upload_history_file_hash ON upload_history(file_hash);
+      CREATE INDEX IF NOT EXISTS idx_upload_history_data_source ON upload_history(data_source);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_upload_history_unique ON upload_history(file_hash, data_source);
+    `
+    
+    await supabase.rpc('execute_sql', { sql: uploadHistorySQL })
+
+    // Create data table if it doesn't exist
     const createTableSQL = generateCreateTableSQL(tableName, columnTypes)
     
-    // This will only create table if it doesn't exist (CREATE TABLE IF NOT EXISTS)
     const { error: createError } = await supabase.rpc('execute_sql', {
       sql: createTableSQL
     })
