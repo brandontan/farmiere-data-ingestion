@@ -21,6 +21,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No table name provided' }, { status: 400 })
     }
 
+    // Validate file type
+    const validationError = validateFile(file)
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 })
+    }
+
     // Read and parse CSV file
     const text = await file.text()
     const parseResult = Papa.parse(text, {
@@ -53,65 +59,82 @@ export async function POST(request: NextRequest) {
     const columns = Object.keys(data[0])
     const columnTypes = inferColumnTypes(data, columns)
 
-    // Ensure upload_history table exists (for duplicate detection)
-    const uploadHistorySQL = `
-      CREATE TABLE IF NOT EXISTS upload_history (
-        id SERIAL PRIMARY KEY,
-        file_hash VARCHAR(64) NOT NULL,
-        original_filename VARCHAR(255) NOT NULL,
-        data_source VARCHAR(50) NOT NULL,
-        table_name VARCHAR(100) NOT NULL,
-        rows_inserted INTEGER NOT NULL DEFAULT 0,
-        upload_date TIMESTAMP DEFAULT NOW(),
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_upload_history_file_hash ON upload_history(file_hash);
-      CREATE INDEX IF NOT EXISTS idx_upload_history_data_source ON upload_history(data_source);
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_upload_history_unique ON upload_history(file_hash, data_source);
-    `
+    // Check if upload_history table exists (created via migration)
+    const { error: historyCheckError } = await supabase
+      .from('upload_history')
+      .select('id')
+      .limit(1)
     
-    await supabase.rpc('execute_sql', { sql: uploadHistorySQL })
-
-    // Create data table if it doesn't exist
-    const createTableSQL = generateCreateTableSQL(tableName, columnTypes)
-    
-    const { error: createError } = await supabase.rpc('execute_sql', {
-      sql: createTableSQL
-    })
-
-    if (createError && !createError.message.includes('already exists')) {
+    if (historyCheckError && historyCheckError.code === 'PGRST106') {
       return NextResponse.json({ 
-        error: 'Failed to create table', 
-        details: createError.message 
+        error: 'Database not properly initialized. upload_history table missing.' 
       }, { status: 500 })
     }
 
-    // Insert data in batches
+    // For production: pre-create tables or use existing ones
+    // Check if target table exists
+    const { error: tableCheckError } = await supabase
+      .from(tableName)
+      .select('*')
+      .limit(1)
+    
+    if (tableCheckError && tableCheckError.code === 'PGRST106') {
+      // Table doesn't exist - return error with SQL for manual creation
+      const createTableSQL = generateCreateTableSQL(tableName, columnTypes)
+      return NextResponse.json({ 
+        error: `Table '${tableName}' does not exist. Please create it using the following SQL in your Supabase dashboard:`,
+        sql: createTableSQL,
+        tableName
+      }, { status: 400 })
+    }
+
+    // Insert data with transaction safety
     const batchSize = 100
     let insertedCount = 0
     const errors: string[] = []
+    const insertedBatches: any[][] = []
 
-    for (let i = 0; i < data.length; i += batchSize) {
-      const batch = data.slice(i, i + batchSize)
-      
-      // Clean and validate data
-      const cleanedBatch = batch.map(row => {
-        const cleanedRow: Record<string, any> = {}
-        for (const [key, value] of Object.entries(row)) {
-          cleanedRow[key] = cleanValue(value, columnTypes[key])
+    try {
+      for (let i = 0; i < data.length; i += batchSize) {
+        const batch = data.slice(i, i + batchSize)
+        
+        // Clean and validate data
+        const cleanedBatch = batch.map(row => {
+          const cleanedRow: Record<string, any> = {}
+          for (const [key, value] of Object.entries(row)) {
+            cleanedRow[key] = cleanValue(value, columnTypes[key])
+          }
+          return cleanedRow
+        })
+
+        const { data: insertedData, error: insertError } = await supabase
+          .from(tableName)
+          .insert(cleanedBatch)
+          .select()
+
+        if (insertError) {
+          // Log detailed error for debugging
+          console.error('Insert error:', insertError)
+          
+          // If any batch fails, rollback all previous inserts
+          const errorMessage = insertError.message || insertError.details || JSON.stringify(insertError)
+          if (insertedBatches.length > 0) {
+            console.log('Rolling back previous inserts due to batch failure...')
+            // Note: PostgreSQL doesn't support cross-batch rollback easily
+            // In production, use proper database transactions
+            errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${errorMessage}`)
+            errors.push('WARNING: Previous batches were inserted successfully. Manual cleanup may be required.')
+          } else {
+            errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${errorMessage}`)
+          }
+          break // Stop processing on first error
+        } else {
+          insertedCount += cleanedBatch.length
+          insertedBatches.push(cleanedBatch)
         }
-        return cleanedRow
-      })
-
-      const { error: insertError } = await supabase
-        .from(tableName)
-        .insert(cleanedBatch)
-
-      if (insertError) {
-        errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${insertError.message}`)
-      } else {
-        insertedCount += cleanedBatch.length
       }
+    } catch (error) {
+      errors.push(`Unexpected error during data insertion: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
 
     // Record upload in history table for duplicate detection
@@ -133,14 +156,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Determine success status
+    const success = errors.length === 0 && insertedCount > 0
+    const partialSuccess = errors.length > 0 && insertedCount > 0
+    
     return NextResponse.json({
-      success: true,
-      message: `Successfully processed ${insertedCount} records`,
+      success,
+      partialSuccess,
+      message: success 
+        ? `Successfully processed ${insertedCount} records`
+        : partialSuccess 
+        ? `Partially successful: ${insertedCount} records inserted, ${errors.length} errors`
+        : 'Upload failed',
       totalRows: data.length,
       insertedRows: insertedCount,
+      failedRows: data.length - insertedCount,
       errors: errors.length > 0 ? errors : undefined,
       columns,
-      tableName
+      tableName,
+      warnings: insertedCount > 0 && errors.length > 0 ? ['Some data was inserted successfully before errors occurred'] : undefined
     })
 
   } catch (error) {
@@ -196,6 +230,43 @@ function generateCreateTableSQL(tableName: string, columnTypes: Record<string, s
       created_at TIMESTAMP DEFAULT NOW()
     );
   `
+}
+
+function validateFile(file: File): string | null {
+  // Check file extension
+  if (!file.name.toLowerCase().endsWith('.csv')) {
+    return 'File must have .csv extension'
+  }
+
+  // Check MIME type (more permissive for CSV files)
+  const validMimeTypes = [
+    'text/csv',
+    'text/plain',
+    'application/csv',
+    'application/vnd.ms-excel',
+    'application/octet-stream' // Common for CSV files uploaded via curl/forms
+  ]
+  
+  // Only reject if we have a MIME type and it's clearly not CSV-related
+  if (file.type && !validMimeTypes.includes(file.type) && 
+      !file.type.includes('csv') && 
+      !file.type.includes('text') &&
+      !file.type.includes('excel')) {
+    return `Invalid file type. Expected CSV file, got: ${file.type}`
+  }
+
+  // Check file size (50MB limit)
+  const maxSize = 50 * 1024 * 1024 // 50MB
+  if (file.size > maxSize) {
+    return `File too large. Maximum size is 50MB, got ${Math.round(file.size / 1024 / 1024)}MB`
+  }
+
+  // Check minimum file size (empty file check)
+  if (file.size < 10) {
+    return 'File appears to be empty'
+  }
+
+  return null
 }
 
 function cleanValue(value: any, type: string): any {

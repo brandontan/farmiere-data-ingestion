@@ -13,6 +13,7 @@ export interface ParsedData {
   columns: string[]
   fileName: string
   fileHash?: string
+  dataSource?: string
 }
 
 export interface UploadResult {

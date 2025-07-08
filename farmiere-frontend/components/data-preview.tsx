@@ -3,9 +3,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertTriangle } from 'lucide-react'
 import { ParsedData, UploadResult } from '@/app/page'
 
 interface DataPreviewProps {
@@ -25,7 +22,6 @@ export function DataPreview({
   onUploadError,
   onReset
 }: DataPreviewProps) {
-  const [dataSource, setDataSource] = useState<string>('')
   const [isUploading, setIsUploading] = useState(false)
 
   const dataSources = [
@@ -35,7 +31,7 @@ export function DataPreview({
     { value: 'goaffpro', label: 'GoAffPro', table: 'temp_goaffpro_data' }
   ]
 
-  const selectedSource = dataSources.find(s => s.value === dataSource)
+  const selectedSource = dataSources.find(s => s.value === data.dataSource)
   const previewData = data.data.slice(0, 10)
 
   const handleUpload = async () => {
@@ -67,7 +63,7 @@ export function DataPreview({
       formData.append('createTable', 'false') // Only create table if it doesn't exist
       formData.append('appendMode', 'true') // Append to existing table
       formData.append('fileName', data.fileName)
-      formData.append('dataSource', dataSource)
+      formData.append('dataSource', data.dataSource || '')
       if (data.fileHash) {
         formData.append('fileHash', data.fileHash)
       }
@@ -102,39 +98,21 @@ export function DataPreview({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Data Preview</CardTitle>
+          <CardTitle>Preview Data</CardTitle>
           <CardDescription>
-            File: {data.fileName} | Rows: {data.data.length} | Columns: {data.columns.length}
+            {selectedSource?.label} | File: {data.fileName} | {data.data.length} rows, {data.columns.length} columns
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Target Data Source</label>
-              <Select value={dataSource} onValueChange={setDataSource}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select target data source" />
-                </SelectTrigger>
-                <SelectContent>
-                  {dataSources.map((source) => (
-                    <SelectItem key={source.value} value={source.value}>
-                      {source.label} → {source.table}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                First upload creates table, subsequent uploads append to existing table
-              </p>
-            </div>
 
             <div className="border rounded-lg overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-secondary/20">
                     <tr>
                       {data.columns.map((column, index) => (
-                        <th key={index} className="px-4 py-2 text-left font-medium text-gray-900 border-b">
+                        <th key={index} className="px-4 py-2 text-left font-medium text-foreground border-b border-border">
                           {column}
                         </th>
                       ))}
@@ -142,9 +120,9 @@ export function DataPreview({
                   </thead>
                   <tbody>
                     {previewData.map((row, rowIndex) => (
-                      <tr key={rowIndex} className="border-b">
+                      <tr key={rowIndex} className="border-b border-border hover:bg-secondary/10">
                         {data.columns.map((column, colIndex) => (
-                          <td key={colIndex} className="px-4 py-2 text-gray-700">
+                          <td key={colIndex} className="px-4 py-2 text-slate-200">
                             {String(row[column] || '')}
                           </td>
                         ))}
@@ -154,7 +132,7 @@ export function DataPreview({
                 </table>
               </div>
               {data.data.length > 10 && (
-                <div className="px-4 py-2 bg-gray-50 text-sm text-gray-600 border-t">
+                <div className="px-4 py-2 bg-secondary/20 text-sm text-muted-foreground border-t border-border">
                   Showing first 10 rows of {data.data.length} total rows
                 </div>
               )}
@@ -166,9 +144,9 @@ export function DataPreview({
               </Button>
               <Button 
                 onClick={handleUpload}
-                disabled={!dataSource || isUploading}
+                disabled={!selectedSource || isUploading}
               >
-                {isUploading ? 'Uploading...' : 'Upload to Supabase'}
+                {isUploading ? 'Uploading...' : 'Upload'}
               </Button>
             </div>
           </div>

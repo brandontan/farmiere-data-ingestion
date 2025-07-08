@@ -21,10 +21,10 @@ export function FileUpload({ onDataParsed, disabled }: FileUploadProps) {
   const [dragActive, setDragActive] = useState(false)
 
   const dataSources = [
-    { value: 'tiktok', label: 'TikTok Shop' },
-    { value: 'shopee', label: 'Shopee' },
-    { value: 'aipost', label: 'aiPost (Affiliate Enrollment)' },
-    { value: 'goaffpro', label: 'GoAffPro' }
+    { value: 'tiktok', label: 'TikTok Shop', table: 'temp_tiktok_data' },
+    { value: 'shopee', label: 'Shopee', table: 'temp_shopee_data' },
+    { value: 'aipost', label: 'aiPost (Affiliate Enrollment)', table: 'temp_aipost_data' },
+    { value: 'goaffpro', label: 'GoAffPro', table: 'temp_goaffpro_data' }
   ]
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -154,7 +154,13 @@ export function FileUpload({ onDataParsed, disabled }: FileUploadProps) {
       const duplicateCheck = await checkForDuplicateFile(fileHash, selectedFile.name, dataSource)
       
       if (duplicateCheck.isDuplicate) {
-        setError(`WARNING: This CSV has been uploaded before on ${new Date(duplicateCheck.uploadDate).toLocaleString()}`)
+        if (duplicateCheck.type === 'content') {
+          setError(`WARNING: This exact file content was already uploaded to ${duplicateCheck.dataSource} on ${new Date(duplicateCheck.uploadDate).toLocaleString()}`)
+        } else if (duplicateCheck.type === 'filename') {
+          setError(`ERROR: File "${duplicateCheck.originalFileName}" already exists in ${duplicateCheck.dataSource}. Please rename your file or use a different filename.`)
+        } else {
+          setError(`WARNING: This CSV has been uploaded before on ${new Date(duplicateCheck.uploadDate).toLocaleString()}`)
+        }
         setIsProcessing(false)
         return
       }
@@ -193,12 +199,13 @@ export function FileUpload({ onDataParsed, disabled }: FileUploadProps) {
             return
           }
 
-          // Pass data along with file hash
+          // Pass data along with file hash and selected data source
           onDataParsed({
             data,
             columns,
             fileName: selectedFile.name,
-            fileHash
+            fileHash,
+            dataSource
           })
           
           setIsProcessing(false)
@@ -285,7 +292,7 @@ export function FileUpload({ onDataParsed, disabled }: FileUploadProps) {
           disabled={!selectedFile || !dataSource || isProcessing || disabled}
           className="w-full sm:w-auto"
         >
-          {isProcessing ? 'Processing...' : 'Process File'}
+{isProcessing ? 'Validating...' : 'Validate & Preview'}
         </Button>
       </div>
     </div>

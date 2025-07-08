@@ -9,13 +9,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
     }
 
-    // Check for duplicate file hash in upload history
+    // Check for duplicate file hash in same data source
     const { data: duplicateFile, error } = await supabase
       .from('upload_history')
       .select('*')
       .eq('file_hash', fileHash)
       .eq('data_source', dataSource)
-      .single()
+      .limit(1)
+
+    // Also check for same filename in ANY data source
+    const { data: duplicateFileName, error: filenameError } = await supabase
+      .from('upload_history')
+      .select('*')
+      .eq('original_filename', fileName)
+      .limit(1)
 
     if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
       console.error('Database error checking for duplicates:', error)
@@ -25,12 +32,29 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    if (duplicateFile) {
+    // Check for same content in same data source
+    if (duplicateFile && duplicateFile.length > 0) {
+      const duplicate = duplicateFile[0]
       return NextResponse.json({
         isDuplicate: true,
-        uploadDate: duplicateFile.upload_date,
-        originalFileName: duplicateFile.original_filename,
-        uploadId: duplicateFile.id
+        type: 'content',
+        uploadDate: duplicate.upload_date,
+        originalFileName: duplicate.original_filename,
+        dataSource: duplicate.data_source,
+        uploadId: duplicate.id
+      })
+    }
+
+    // Check for same filename in any data source (different restriction)
+    if (duplicateFileName && duplicateFileName.length > 0 && filenameError?.code !== 'PGRST116') {
+      const duplicate = duplicateFileName[0]
+      return NextResponse.json({
+        isDuplicate: true,
+        type: 'filename',
+        uploadDate: duplicate.upload_date,
+        originalFileName: duplicate.original_filename,
+        dataSource: duplicate.data_source,
+        uploadId: duplicate.id
       })
     }
 
