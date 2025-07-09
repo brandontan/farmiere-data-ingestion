@@ -9,12 +9,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
     }
 
-    // Check for duplicate file hash in same data source
+    // Check for duplicate file hash in ANY data source
     const { data: duplicateFile, error } = await supabaseServer
       .from('upload_history')
       .select('*')
       .eq('file_hash', fileHash)
-      .eq('data_source', dataSource)
       .limit(1)
 
     // Also check for same filename in ANY data source
@@ -32,7 +31,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Check for same content in same data source
+    // Check for same content in any data source
     if (duplicateFile && duplicateFile.length > 0) {
       const duplicate = duplicateFile[0]
       return NextResponse.json({
