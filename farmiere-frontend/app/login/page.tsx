@@ -63,8 +63,7 @@ function LoginForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <input
                   type="email"
