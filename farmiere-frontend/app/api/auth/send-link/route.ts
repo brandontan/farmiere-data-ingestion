@@ -6,7 +6,7 @@ const SECRET_KEY = new TextEncoder().encode(
   process.env.JWT_SECRET || 'your-secret-key-change-this-in-production'
 )
 
-const ALLOWED_EMAILS = ['ai.ops@fefifo.co', 'brandon@n8npro.com', 'brandontan@gmail.com']
+const ALLOWED_EMAILS = ['ai.ops@fefifo.co', 'brandon@n8npro.com', 'brandontan@gmail.com', 'gavintan.hs@gmail.com']
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
