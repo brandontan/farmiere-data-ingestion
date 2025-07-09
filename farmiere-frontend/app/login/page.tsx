@@ -9,6 +9,7 @@ import { Mail, CheckCircle } from 'lucide-react'
 
 function LoginForm() {
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -29,27 +30,18 @@ function LoginForm() {
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/auth/send-link', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email, password })
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        setSuccess(true)
-        setEmail('')
-        // In development, show the link
-        if (data.magicLink) {
-          console.log('Magic link:', data.magicLink)
-          // Auto-redirect in development
-          setTimeout(() => {
-            window.location.href = data.magicLink
-          }, 2000)
-        }
+        window.location.href = '/'
       } else {
-        setError(data.error || 'Failed to send login link')
+        setError(data.error || 'Invalid email or password')
       }
     } catch (error) {
       setError('An error occurred. Please try again.')
@@ -67,30 +59,11 @@ function LoginForm() {
           </div>
           <CardTitle>Login to CSV Upload System</CardTitle>
           <CardDescription>
-            Enter your email to receive a secure login link
+            Enter your email and password to access the system
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {success ? (
-            <div className="text-center space-y-4">
-              <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
-              <p className="text-sm">
-                Login link sent! Check your email or browser console.
-              </p>
-              {email === 'ai.ops@fefifo.co' && (
-                <div className="text-xs text-muted-foreground p-2 bg-gray-100 rounded break-all">
-                  Check the browser console for your magic link
-                </div>
-              )}
-              <Button
-                onClick={() => setSuccess(false)}
-                variant="outline"
-                className="w-full"
-              >
-                Send Another Link
-              </Button>
-            </div>
-          ) : (
+          {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <input
@@ -102,8 +75,18 @@ function LoginForm() {
                   autoFocus
                   required
                 />
+              </div>
+              <div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                  required
+                />
                 <p className="text-xs text-muted-foreground mt-2">
-                  Only authorized emails can access this system
+                  Contact admin if you forgot your password
                 </p>
               </div>
               
@@ -116,12 +99,11 @@ function LoginForm() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading || !email}
+                disabled={isLoading || !email || !password}
               >
-                {isLoading ? 'Sending...' : 'Send Login Link'}
+                {isLoading ? 'Logging in...' : 'Login'}
               </Button>
             </form>
-          )}
         </CardContent>
       </Card>
     </div>
