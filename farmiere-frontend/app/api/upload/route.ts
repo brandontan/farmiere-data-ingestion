@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Papa from 'papaparse'
-import { supabase } from '@/lib/supabase'
+import { supabaseServer } from '@/lib/supabase-server'
 
 export async function POST(request: NextRequest) {
   console.log('=== UPLOAD REQUEST STARTED ===')
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     console.log('Inferred column types:', columnTypes)
 
     // Check if upload_history table exists (created via migration)
-    const { error: historyCheckError } = await supabase
+    const { error: historyCheckError } = await supabaseServer
       .from('upload_history')
       .select('id')
       .limit(1)
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     let tableWasCreated = false
     
     // Check if target table exists, create if it doesn't
-    const { error: tableCheckError } = await supabase
+    const { error: tableCheckError } = await supabaseServer
       .from(tableName)
       .select('*')
       .limit(1)
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
         console.log(`Batch ${batchNumber} cleaned data sample:`, cleanedBatch[0])
         console.log(`Inserting batch ${batchNumber} into table: ${tableName}`)
 
-        const { data: insertedData, error: insertError } = await supabase
+        const { data: insertedData, error: insertError } = await supabaseServer
           .from(tableName)
           .insert(cleanedBatch)
           .select()
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
       try {
         if (insertedCount > 0) {
           // Only record successful uploads
-          const { data: historyData } = await supabase
+          const { data: historyData } = await supabaseServer
             .from('upload_history')
             .insert({
               file_hash: fileHash,
@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
           }
         } else {
           // If no rows were inserted, clean up any existing history for this file
-          await supabase
+          await supabaseServer
             .from('upload_history')
             .delete()
             .eq('file_hash', fileHash)
@@ -328,7 +328,7 @@ async function createTableDynamically(createTableSQL: string, tableName: string)
     console.log('SQL to execute:', createTableSQL)
     
     // Use the database function we created to dynamically create tables
-    const { data, error } = await supabase.rpc('create_table_if_not_exists', {
+    const { data, error } = await supabaseServer.rpc('create_table_if_not_exists', {
       table_name_param: tableName,
       table_sql_param: createTableSQL
     })

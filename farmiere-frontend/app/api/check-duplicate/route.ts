@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseServer } from '@/lib/supabase-server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check for duplicate file hash in same data source
-    const { data: duplicateFile, error } = await supabase
+    const { data: duplicateFile, error } = await supabaseServer
       .from('upload_history')
       .select('*')
       .eq('file_hash', fileHash)
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     // Also check for same filename in ANY data source
-    const { data: duplicateFileName, error: filenameError } = await supabase
+    const { data: duplicateFileName, error: filenameError } = await supabaseServer
       .from('upload_history')
       .select('*')
       .eq('original_filename', fileName)

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseServer } from '@/lib/supabase-server'
 
 export async function POST() {
   try {
     // Delete all upload history records where no rows were actually inserted
-    const { error, count } = await supabase
+    const { error, count } = await supabaseServer
       .from('upload_history')
       .delete()
       .eq('rows_inserted', 0)
