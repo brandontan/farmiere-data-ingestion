@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ 
           success: true,
           message: 'Magic link generated! Check console logs (email sending failed).',
-          ...(process.env.NODE_ENV === 'development' ? { magicLink } : {})
+          magicLink
         })
       }
 
