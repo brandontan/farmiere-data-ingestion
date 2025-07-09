@@ -280,9 +280,9 @@ export function FileUpload({ onDataParsed, disabled }: FileUploadProps) {
       </div>
 
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className={error.includes('WARNING') ? 'bg-red-600 text-white border-red-600 [&>svg]:text-white' : ''}>
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className={error.includes('WARNING') ? 'text-white' : ''}>{error}</AlertDescription>
         </Alert>
       )}
 
