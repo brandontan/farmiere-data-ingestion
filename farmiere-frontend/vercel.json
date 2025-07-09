@@ -1,5 +1,4 @@
 {
-  "rootDirectory": "farmiere-frontend",
   "git": {
     "deploymentEnabled": {
       "master": true,
